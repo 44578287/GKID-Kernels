@@ -139,8 +139,19 @@ jobs:
           RUN_NUM: -r${{ github.run_number }}
         run: |
           export GIT_CLONE_PROTECTION_ACTIVE=false
-          chmod +x *.sh py/*.py
+          chmod +x *.sh py/*.py scripts/*.sh
           ./build.sh
+
+      - name: Post-build audit
+        if: success() && ((github.event_name == 'push') || inputs.TODO == 'kernel')
+        env:
+          KSU_SUSFS: ${{ github.event_name == 'push' && 'true' || inputs.ENABLE_SUSFS }}
+          ENABLE_KPM: ${{ github.event_name == 'push' && 'true' || inputs.ENABLE_KPM }}
+          ENABLE_LING_ZRAM: ${{ github.event_name == 'push' && 'true' || inputs.ENABLE_LING_ZRAM }}
+          ENABLE_BBG: ${{ github.event_name == 'push' && 'true' || inputs.ENABLE_BBG }}
+          ENABLE_NTSYNC: ${{ github.event_name == 'push' && 'true' || inputs.ENABLE_NTSYNC }}
+          LTO: ${{ github.event_name == 'push' && 'fullLTO' || inputs.LTO }}
+        run: bash scripts/audit_shennong_build.sh
 
       - name: Create KernelSU module for wireless modules
         if: ${{ false }}
