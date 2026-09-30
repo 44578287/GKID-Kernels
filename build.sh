@@ -110,6 +110,7 @@ fi
 generate_gh_changelog "maxsteeel/nomount" "master" 5 "$RELEASE_DIR/nomount_changelog.txt"
 generate_gh_changelog "tiann/KernelSU" "main" 5 "$RELEASE_DIR/ksu_changelog.txt"
 generate_gh_changelog "ReSukiSU/ReSukiSU" "main" 5 "$RELEASE_DIR/ReSukiSU_changelog.txt"
+generate_gh_changelog "SukiSU-Ultra/SukiSU-Ultra" "builtin" 5 "$RELEASE_DIR/SukiSU_changelog.txt"
 
 echo "::group::[*] Downloading Clang"
 CLANG_BIN="$WORKDIR/neutron-clang/bin"
@@ -211,6 +212,22 @@ if [ "$NH" = "true" ] && ! kernel_version_eq "$KERNEL_VERSION" "6.1" && kernel_v
 fi
 
 set -eo pipefail
+
+if [ "$KSU" = "SKSU" ]; then
+  log "SukiSU Ultra included"
+
+  if susfs_included; then
+    # Match the proven LingLuo17 GKI integration: SukiSU builtin + external
+    # gki-android14-6.1 SUSFS kernel-side patches. CONFIG_KPM is enabled by
+    # configs/gki_defconfig.sh for all KSU variants.
+    install_ksu "SukiSU-Ultra/SukiSU-Ultra" "builtin"
+    clone_susfs
+    apply_susfs_patches
+  else
+    install_ksu "SukiSU-Ultra/SukiSU-Ultra" "main"
+  fi
+fi
+
 if susfs_included && [ "$KSU" = "RSKSU" ]; then
   log "ReSukiSU included"
   install_ksu "ReSukiSU/ReSukiSU" "main"
