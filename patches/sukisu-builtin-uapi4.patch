@@ -21,41 +21,6 @@ index bfdc1d14..8db9f90d 100644
  
  struct ksu_get_info_cmd {
      __u32 version; /* Output: KERNEL_SU_VERSION */
-diff --git a/kernel/feature/sucompat.c b/kernel/feature/sucompat.c
-index 9c90b6a0..f7a4a9f1 100644
---- a/kernel/feature/sucompat.c
-+++ b/kernel/feature/sucompat.c
-@@ -158,6 +158,17 @@ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
-     ksu_sulog_emit_pending(pending_sucompat, ret, GFP_KERNEL);
-     return 0;
- }
-+
-+int ksu_handle_post_execveat_sucompat(int *fd, struct filename **filename_ptr,
-+                                      void *argv_user, void *envp_user,
-+                                      int *__never_use_flags, int *retval)
-+{
-+    if (retval && *retval >= 0)
-+        (void)ksu_install_su_fd();
-+
-+    return 0;
-+}
- 
- #ifdef KSU_COMPAT_USE_STATIC_KEY
- extern struct static_key_true is_first_zygote;
-diff --git a/kernel/feature/sucompat.h b/kernel/feature/sucompat.h
-index 58a987f8..36f1ba51 100644
---- a/kernel/feature/sucompat.h
-+++ b/kernel/feature/sucompat.h
-@@ -10,6 +10,9 @@ int ksu_handle_stat(int *dfd, struct filename **filename, int *flags);
- int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
-                  void *argv_user, void *envp_user,
-                  int *__never_use_flags);
-+int ksu_handle_post_execveat_sucompat(int *fd, struct filename **filename_ptr,
-+                                      void *argv_user, void *envp_user,
-+                                      int *__never_use_flags, int *retval);
- #else
- int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode, int *__unused_flags);
- int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags);
 diff --git a/kernel/supercall/dispatch.c b/kernel/supercall/dispatch.c
 index c1d3abaf..a7d117a9 100644
 --- a/kernel/supercall/dispatch.c
