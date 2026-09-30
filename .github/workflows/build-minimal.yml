@@ -1,0 +1,44 @@
+name: Shennong Minimal 6.1.138 SukiSU
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - minimal-trigger
+  workflow_dispatch:
+
+jobs:
+  build-minimal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 1
+
+      - name: Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bc bison flex libssl-dev libelf-dev dwarves cpio lz4 zip curl git
+
+      - name: Build minimal kernel
+        run: |
+          chmod +x build-minimal.sh scripts/audit_shennong_minimal.sh
+          ./build-minimal.sh
+
+      - name: Upload minimal artifact
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: shennong-minimal-6.1.138-${{ github.run_number }}
+          path: |
+            artifacts/GKID-Minimal-SukiSU-6.1.138-r*.zip
+            artifacts/minimal-audit.txt
+            artifacts/minimal.config
+            artifacts/minimal-source-status.txt
+            artifacts/minimal-source-diff.patch
+            artifacts/minimal-build.log
+          retention-days: 7
