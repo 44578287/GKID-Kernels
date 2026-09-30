@@ -42,6 +42,13 @@ fi
 if [[ "${ENABLE_NTSYNC:-true}" == "true" ]]; then need_cfg CONFIG_NTSYNC; fi
 if [[ "${ENABLE_BBG:-true}" == "true" ]]; then need_cfg CONFIG_BBG; fi
 
+if [[ "${ENABLE_SAFE_PROFILE:-true}" == "true" ]]; then
+  grep -q 'freeze_timeout_msecs = 20 \* MSEC_PER_SEC' ksrc/kernel/power/process.c || fail "SAFE profile freeze timeout not restored"
+  ! grep -q "Don't let anything in Android change the freeze timeout" ksrc/kernel/power/main.c || fail "SAFE profile still locks freeze timeout sysfs"
+  grep -q '#define JBD2_DEFAULT_MAX_COMMIT_AGE 5' ksrc/include/linux/jbd2.h || fail "SAFE profile ext4 commit age not restored"
+  grep -A3 '^bad_version:' ksrc/kernel/module/version.c | grep -q 'return 0;' || fail "SAFE profile module version check not restored"
+fi
+
 if find . -name '*.rej' -type f | grep -q .; then
   find . -name '*.rej' -type f -print
   fail "patch reject files exist"
