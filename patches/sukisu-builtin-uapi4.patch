@@ -165,6 +165,7 @@ index c259c92e..3b2a8462 100644
 +
 +int ksu_install_su_fd(void)
 +{
++    // This descriptor must be installed after the exec into ksud.
 +    return ksu_install_fd_with_permissions(O_CLOEXEC, KSU_DRIVER_PERMISSION_SU_SESSION);
 +}
 +
@@ -193,11 +194,13 @@ index 50a35a0f..7ddcc34f 100644
 @@ -14,10 +15,14 @@ struct ksu_ioctl_cmd_map {
      const char *name;
      ksu_ioctl_handler_t handler;
-     ksu_perm_check_t perm_check;
+     ksu_perm_check_t perm_check; // Permission check function
 +    bool allow_su_session;
  };
  
+ // Install KSU fd to current process
  int ksu_install_fd(void);
++// Install a KSU fd that authorizes operations required while starting su.
 +int ksu_install_su_fd(void);
 +bool ksu_is_su_session_fd(const struct file *filp);
  
