@@ -13,6 +13,10 @@ KERNEL_DEFCONFIG="gki_defconfig"
 
 KERNEL_VERSION="${KERNEL_VERSION:-6.1}"
 
+# Reproducible SukiSU builtin revision for the first shennong build.
+# Bump deliberately after a successful build/test cycle.
+SUKISU_BUILTIN_REF="b20dee702035af09cb2ecb5f35443bbc1747f3e6"
+
 sudo timedatectl set-timezone "$TIMEZONE" || export TZ="$TIMEZONE"
 
 RELEASE="$(date +v%y.%m.%d)${RUN_NUM}"
@@ -225,7 +229,23 @@ if [ "$KSU" = "SKSU" ]; then
     # Match the proven LingLuo17 GKI integration: SukiSU builtin + external
     # gki-android14-6.1 SUSFS kernel-side patches. CONFIG_KPM is enabled by
     # configs/gki_defconfig.sh for all KSU variants.
-    install_ksu "SukiSU-Ultra/SukiSU-Ultra" "builtin"
+    install_ksu "SukiSU-Ultra/SukiSU-Ultra" "$SUKISU_BUILTIN_REF"
+
+    UAPI_FILE="KernelSU/kernel/include/uapi/supercall.h"
+    CURRENT_UAPI="$(grep -ohE 'KERNEL_SU_UAPI_VERSION[^0-9]*[0-9]+' "$UAPI_FILE" 2>/dev/null | grep -oE '[0-9]+' | tail -n1 || true)"
+    if [ "${CURRENT_UAPI:-0}" -lt 4 ]; then
+      log "Syncing SukiSU builtin UAPI ${CURRENT_UAPI:-unknown} -> 4"
+      patch -p1 --forward -d KernelSU < "$WORKDIR/patches/sukisu-builtin-uapi4.patch"
+    else
+      log "SukiSU builtin UAPI is already $CURRENT_UAPI; sync patch not needed"
+    fi
+
+    FINAL_UAPI="$(grep -ohE 'KERNEL_SU_UAPI_VERSION[^0-9]*[0-9]+' "$UAPI_FILE" | grep -oE '[0-9]+' | tail -n1)"
+    [ "$FINAL_UAPI" = "4" ] || { error "SukiSU UAPI sync failed: got $FINAL_UAPI"; exit 1; }
+    grep -q "ksu_install_su_fd" KernelSU/kernel/supercall/supercall.c || {
+      error "SukiSU UAPI4 su-session support is incomplete"; exit 1;
+    }
+
     clone_susfs
     apply_susfs_patches
   else
