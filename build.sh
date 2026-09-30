@@ -177,6 +177,11 @@ if kernel_version_lt "$KERNEL_VERSION" "6.12"; then
   success "NTSync patches applied"
 fi
 
+if kernel_version_eq "$KERNEL_VERSION" "6.1" && [ "$KSU" = "SKSU" ]; then
+  log "Applying enhanced LingLuo ZRAM stack"
+  bash "$WORKDIR/scripts/apply_ling_zram_6_1.sh"
+fi
+
 log "BBG included"
 wget -qO- "https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh" | bash
 sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' "security/Kconfig"
