@@ -129,8 +129,16 @@ for path, needle, expected, label in checks:
         raise SystemExit(f"SAFE profile check failed: {label}")
     print(f"[AUDIT] PASS: {label}")
 
-print("[AUDIT] INFO: module version policy validated by build profile")
 PY
+  if [[ "${ENABLE_STRICT_MODULE_CRC:-false}" == "true" ]]; then
+    grep -A4 '^bad_version:' "$ROOT/ksrc/kernel/module/version.c" | grep -q 'return 0;' \
+      || fail "strict module CRC policy not active"
+    pass "strict module CRC policy active"
+  else
+    grep -A4 '^bad_version:' "$ROOT/ksrc/kernel/module/version.c" | grep -q 'but ignore' \
+      || fail "GKID module CRC compatibility policy not active"
+    pass "GKID module CRC compatibility policy active"
+  fi
 fi
 
 mapfile -t REJECTS < <(find "$ROOT" -name '*.rej' -type f -print)
@@ -141,7 +149,7 @@ fi
 pass "no patch reject files"
 
 KR="$(cat "$KREL")"
-[[ "$KR" == 6.1.177-* ]] || fail "unexpected kernelrelease: $KR"
+[[ "$KR" == 6.1.138-android14-11-* ]] || fail "unexpected kernelrelease: $KR"
 pass "kernelrelease=$KR"
 
 echo "Image_SHA256=$(sha256sum "$IMG" | awk '{print $1}')"
