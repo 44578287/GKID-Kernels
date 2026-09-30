@@ -1,4 +1,4 @@
-name: GKID Builder
+name: Shennong GKID SukiSU Builder
 permissions:
   contents: write
   actions: write
@@ -7,74 +7,60 @@ on:
   workflow_dispatch:
     inputs:
       TODO:
-        description: To do
+        description: "Build target"
         default: "kernel"
         type: choice
         options:
           - "kernel"
           - "defconfig"
 
-      TEST:
-        description: debug the pipeline
-        default: "no"
-        type: choice
-        options:
-          - "no"
-          - "yes"
-
       LTO:
-        description: enable LTO optimization
+        description: "LTO optimization"
         default: "fullLTO"
         type: choice
         options:
-          - "noneLTO"
-          - "thinLTO"
           - "fullLTO"
+          - "thinLTO"
+          - "noneLTO"
 
-      KERNEL_VERSION:
-        description: "GKI LTS kernel line to build"
-        default: "All"
+      ENABLE_SUSFS:
+        description: "Enable SuSFS"
+        type: boolean
+        default: true
+
+      ENABLE_KPM:
+        description: "Enable SukiSU KPM"
+        type: boolean
+        default: true
+
+      ENABLE_LING_ZRAM:
+        description: "Enable LingLuo enhanced ZRAM stack"
+        type: boolean
+        default: true
+
+      ZRAM_DEFAULT:
+        description: "Default ZRAM compressor"
         type: choice
+        default: "lz4"
         options:
-          - "All"
-          - "5.10"
-          - "5.15"
-          - "6.1"
-          - "6.6"
-          - "6.12"
+          - "lz4"
+          - "lz4hc"
+          - "lz4k"
+          - "lz4kd"
+          - "lz4k_oplus"
 
-      BUILD_VANILLA:
-        description: "Build Vanilla (no KSU)"
+      ENABLE_BBG:
+        description: "Enable Baseband Guard"
         type: boolean
         default: true
 
-      BUILD_KSU:
-        description: "Build with KernelSU"
+      ENABLE_NTSYNC:
+        description: "Enable NTSync"
         type: boolean
         default: true
 
-      BUILD_KSU_SUSFS:
-        description: "Build with KernelSU and its forks (KernelSU Next) + SUSFS"
-        type: boolean
-        default: true
-
-      CLEAN_LTO_CACHE:
-        description: "Clean ThinLTO cache to fix .config bug"
-        type: boolean
-        default: true
-
-      DROIDSPACES:
-        description: "Enable droidspaces-oss support"
-        type: boolean
-        default: true
-
-      NH:
-        description: "Enable NetHunter support"
-        type: boolean
-        default: true
-
-      NM:
-        description: "Enable NoMount support"
+      PUBLISH_RELEASE:
+        description: "Publish GitHub prerelease/Telegram (requires secrets)"
         type: boolean
         default: false
 
@@ -83,28 +69,6 @@ env:
   DEBIAN_FRONTEND: noninteractive
 
 jobs:
-  ensure-cache-release:
-    name: Ensure ccache release exists
-    needs: prepare
-    runs-on: ubuntu-latest
-    steps:
-      - name: Create persistent cache release if missing
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          if gh release view ci-ccache-store --repo "${{ github.repository }}" >/dev/null 2>&1; then
-            echo "ci-ccache-store already exists"
-          else
-            echo "Creating ci-ccache-store release"
-            gh release create ci-ccache-store \
-              --repo "${{ github.repository }}" \
-              --title "CI ccache store (internal - do not delete)" \
-              --notes "Persistent compiler cache used by the build workflow. Each build matrix entry keeps one asset here (ccache-<variant>.tar.zst). Safe to delete if you want to force a cold cache for everything; the workflow recreates this release and rebuilds the caches automatically, just slower for the next run per variant." \
-              --prerelease \
-              --latest=false
-          fi
-
   prepare:
     runs-on: ubuntu-latest
     outputs:
@@ -119,10 +83,11 @@ jobs:
       - name: Generate build matrix
         id: set-matrix
         env:
-          KERNEL_VERSION: ${{ github.event.inputs.KERNEL_VERSION }}
-          BUILD_VANILLA: ${{ github.event.inputs.BUILD_VANILLA }}
-          BUILD_KSU: ${{ github.event.inputs.BUILD_KSU }}
-          BUILD_KSU_SUSFS: ${{ github.event.inputs.BUILD_KSU_SUSFS }}
+          KERNEL_VERSION: "6.1"
+          BUILD_VANILLA: "false"
+          BUILD_KSU: "false"
+          BUILD_SKSU: "true"
+          BUILD_KSU_SUSFS: "false"
         run: |
           python3 py/generate-matrix.py >> "$GITHUB_OUTPUT"
 
@@ -145,15 +110,6 @@ jobs:
           sudo apt-get install -y libdw-dev ccache gh bc bison flex libssl-dev libelf-dev dwarves cpio
           pip install lxml
 
-      - name: Restore ccache from release
-        if: github.event.inputs.TEST == 'no' && github.event.inputs.TODO != 'defconfig'
-        id: restore-ccache
-        uses: ./.github/actions/ccache-restore
-        with:
-          repo: ${{ github.repository }}
-          token: ${{ github.token }}
-          variant: ${{ matrix.name }}
-
       - name: Run Build Script
         env:
           GH_TOKEN: ${{ github.token }}
@@ -161,16 +117,21 @@ jobs:
           KERNEL_VERSION: ${{ matrix.kernel_version }}
           KSU: ${{ matrix.KSU }}
           KSU_COMPAT: ${{ matrix.KSU_COMPAT }}
-          KSU_SUSFS: ${{ matrix.KSU_SUSFS }}
+          KSU_SUSFS: ${{ inputs.ENABLE_SUSFS }}
           C_LTO: ${{ matrix.C_LTO }}
-          No_DS: ${{ matrix.No_DS }}
+          No_DS: "false"
           TODO: ${{ inputs.TODO }}
-          TEST: ${{ inputs.TEST }}
+          TEST: "no"
           LTO: ${{ inputs.LTO }}
-          CLEAN_LTO_CACHE: ${{ inputs.CLEAN_LTO_CACHE }}
-          DROIDSPACES: ${{ inputs.DROIDSPACES }}
-          NH: ${{ inputs.NH }}
-          NM: ${{ inputs.NM }}
+          CLEAN_LTO_CACHE: "true"
+          DROIDSPACES: "false"
+          NH: "false"
+          NM: "false"
+          ENABLE_LING_ZRAM: ${{ inputs.ENABLE_LING_ZRAM }}
+          ZRAM_DEFAULT: ${{ inputs.ZRAM_DEFAULT }}
+          ENABLE_BBG: ${{ inputs.ENABLE_BBG }}
+          ENABLE_NTSYNC: ${{ inputs.ENABLE_NTSYNC }}
+          ENABLE_KPM: ${{ inputs.ENABLE_KPM }}
           BUILD_NAME: ${{ matrix.name }}
           RUN_NUM: -r${{ github.run_number }}
         run: |
@@ -179,7 +140,7 @@ jobs:
           ./build.sh
 
       - name: Create KernelSU module for wireless modules
-        if: ${{ inputs.NH }}
+        if: ${{ false }}
         run: |
           echo "Extracting wireless modules..."
           NAME="WirelessKSU"
@@ -215,14 +176,6 @@ jobs:
         run: |
           ccache --show-stats
 
-      - name: Save ccache to release
-        if: always() && github.event.inputs.TEST == 'no' && github.event.inputs.TODO != 'defconfig'
-        uses: ./.github/actions/ccache-save
-        with:
-          repo: ${{ github.repository }}
-          token: ${{ github.token }}
-          variant: ${{ matrix.name }}
-
       - name: Save environment for release
         if: always()
         run: |
@@ -236,7 +189,7 @@ jobs:
           SUSFS_VERSION=${{ env.SUSFS_VERSION }}
           BASE_NAME=${{ env.BASE_NAME }}
           KSU=${{ matrix.KSU }}
-          KSU_SUSFS=${{ matrix.KSU_SUSFS }}
+          KSU_SUSFS=${{ inputs.ENABLE_SUSFS }}
           KERNEL_VERSION=${{ env.KERNEL_VERSION }}
           ANDROID_RELEASE=${{ env.ANDROID_RELEASE }}
           KERNEL_SOURCE_REPO=${{ env.KERNEL_SOURCE_REPO }}
@@ -265,7 +218,7 @@ jobs:
           retention-days: 1
 
       - name: Send rejected patches to Telegram
-        if: always()
+        if: inputs.PUBLISH_RELEASE && always()
         run: |
           if [ -d "rejected-patches-${{ matrix.name }}" ] && [ "$(find rejected-patches-${{ matrix.name }} -type f | wc -l)" -gt 0 ]; then
             for file in rejected-patches-${{ matrix.name }}/*; do
@@ -311,7 +264,7 @@ jobs:
 
   release:
     needs: build
-    if: always() && github.event.inputs.TODO != 'defconfig'
+    if: inputs.PUBLISH_RELEASE && always() && inputs.TODO != 'defconfig'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source
@@ -333,10 +286,10 @@ jobs:
 
       - name: Load environment from builds and prepare release body
         env:
-          TEST_INPUT: ${{ inputs.TEST }}
-          DROIDSPACES_INPUT: ${{ inputs.DroidSpaces }}
-          NH_INPUT: ${{ inputs.NH }}
-          NM_INPUT: ${{ inputs.NM }}
+          TEST_INPUT: "no"
+          DROIDSPACES_INPUT: "false"
+          NH_INPUT: "false"
+          NM_INPUT: "false"
           LTO_INPUT: ${{ inputs.LTO }}
         run: python3 .github/scripts/prepare_release.py
 
