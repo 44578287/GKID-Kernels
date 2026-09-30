@@ -4,6 +4,9 @@ permissions:
   actions: write
 
 on:
+  push:
+    branches:
+      - shennong-sukisu-gkid
   workflow_dispatch:
     inputs:
       TODO:
@@ -33,7 +36,7 @@ on:
 
       KERNEL_VERSION:
         description: "GKI LTS kernel line to build"
-        default: "All"
+        default: "6.1"
         type: choice
         options:
           - "All"
@@ -46,17 +49,22 @@ on:
       BUILD_VANILLA:
         description: "Build Vanilla (no KSU)"
         type: boolean
-        default: true
+        default: false
 
       BUILD_KSU:
         description: "Build with KernelSU"
         type: boolean
+        default: false
+
+      BUILD_SKSU:
+        description: "Build SukiSU Ultra + SuSFS + KPM"
+        type: boolean
         default: true
 
       BUILD_KSU_SUSFS:
-        description: "Build with KernelSU and its forks (KernelSU Next) + SUSFS"
+        description: "Build with KernelSU and ReSukiSU + SUSFS"
         type: boolean
-        default: true
+        default: false
 
       CLEAN_LTO_CACHE:
         description: "Clean ThinLTO cache to fix .config bug"
@@ -66,12 +74,12 @@ on:
       DROIDSPACES:
         description: "Enable droidspaces-oss support"
         type: boolean
-        default: true
+        default: false
 
       NH:
         description: "Enable NetHunter support"
         type: boolean
-        default: true
+        default: false
 
       NM:
         description: "Enable NoMount support"
@@ -119,10 +127,11 @@ jobs:
       - name: Generate build matrix
         id: set-matrix
         env:
-          KERNEL_VERSION: ${{ github.event.inputs.KERNEL_VERSION }}
-          BUILD_VANILLA: ${{ github.event.inputs.BUILD_VANILLA }}
-          BUILD_KSU: ${{ github.event.inputs.BUILD_KSU }}
-          BUILD_KSU_SUSFS: ${{ github.event.inputs.BUILD_KSU_SUSFS }}
+          KERNEL_VERSION: ${{ github.event_name == 'push' && '6.1' || github.event.inputs.KERNEL_VERSION }}
+          BUILD_VANILLA: ${{ github.event_name == 'push' && 'false' || github.event.inputs.BUILD_VANILLA }}
+          BUILD_KSU: ${{ github.event_name == 'push' && 'false' || github.event.inputs.BUILD_KSU }}
+          BUILD_SKSU: ${{ github.event_name == 'push' && 'true' || github.event.inputs.BUILD_SKSU }}
+          BUILD_KSU_SUSFS: ${{ github.event_name == 'push' && 'false' || github.event.inputs.BUILD_KSU_SUSFS }}
         run: |
           python3 py/generate-matrix.py >> "$GITHUB_OUTPUT"
 
@@ -164,13 +173,13 @@ jobs:
           KSU_SUSFS: ${{ matrix.KSU_SUSFS }}
           C_LTO: ${{ matrix.C_LTO }}
           No_DS: ${{ matrix.No_DS }}
-          TODO: ${{ inputs.TODO }}
-          TEST: ${{ inputs.TEST }}
-          LTO: ${{ inputs.LTO }}
-          CLEAN_LTO_CACHE: ${{ inputs.CLEAN_LTO_CACHE }}
-          DROIDSPACES: ${{ inputs.DROIDSPACES }}
-          NH: ${{ inputs.NH }}
-          NM: ${{ inputs.NM }}
+          TODO: ${{ github.event_name == 'push' && 'kernel' || inputs.TODO }}
+          TEST: ${{ github.event_name == 'push' && 'no' || inputs.TEST }}
+          LTO: ${{ github.event_name == 'push' && 'fullLTO' || inputs.LTO }}
+          CLEAN_LTO_CACHE: ${{ github.event_name == 'push' && 'true' || inputs.CLEAN_LTO_CACHE }}
+          DROIDSPACES: ${{ github.event_name == 'push' && 'false' || inputs.DROIDSPACES }}
+          NH: ${{ github.event_name == 'push' && 'false' || inputs.NH }}
+          NM: ${{ github.event_name == 'push' && 'false' || inputs.NM }}
           BUILD_NAME: ${{ matrix.name }}
           RUN_NUM: -r${{ github.run_number }}
         run: |
@@ -265,7 +274,7 @@ jobs:
           retention-days: 1
 
       - name: Send rejected patches to Telegram
-        if: always()
+        if: github.event_name == 'workflow_dispatch' && always()
         run: |
           if [ -d "rejected-patches-${{ matrix.name }}" ] && [ "$(find rejected-patches-${{ matrix.name }} -type f | wc -l)" -gt 0 ]; then
             for file in rejected-patches-${{ matrix.name }}/*; do
@@ -311,7 +320,7 @@ jobs:
 
   release:
     needs: build
-    if: always() && github.event.inputs.TODO != 'defconfig'
+    if: github.event_name == 'workflow_dispatch' && always() && github.event.inputs.TODO != 'defconfig'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source
