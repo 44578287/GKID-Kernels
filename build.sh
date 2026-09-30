@@ -12,6 +12,7 @@ ANYKERNEL_REPO="https://github.com/ahmed-alnassif/AK3-GKID"
 KERNEL_DEFCONFIG="gki_defconfig"
 
 KERNEL_VERSION="${KERNEL_VERSION:-6.1}"
+KERNEL_6_1_REF="${KERNEL_6_1_REF:-9e207186c74578f0ef1872467740ab30f74abe6d}"
 ENABLE_LING_ZRAM="${ENABLE_LING_ZRAM:-true}"
 ENABLE_BBG="${ENABLE_BBG:-true}"
 ENABLE_NTSYNC="${ENABLE_NTSYNC:-true}"
@@ -41,11 +42,7 @@ PATCHES_DIR="$WORKDIR/patches"
 source $WORKDIR/functions.sh
 
 if kernel_version_eq "$KERNEL_VERSION" "6.1"; then
-  if [ "$NH" = "true" ]; then
-    KERNEL_BRANCH="GKID-NH"
-  else
-    KERNEL_BRANCH="GKID-6.1"
-  fi
+  KERNEL_BRANCH="android14-6.1.138_r00"
 else
   IFS='|' read -r KERNEL_REPO KERNEL_BRANCH KERNEL_KMI <<< "$(resolve_kernel_source "$KERNEL_VERSION")"
 fi
@@ -55,6 +52,9 @@ echo "KERNEL_VERSION=$KERNEL_VERSION" >> $GITHUB_ENV
 echo "ANDROID_RELEASE=$ANDROID_RELEASE" >> $GITHUB_ENV
 echo "KERNEL_SOURCE_REPO=$(simplify_gh_url "$KERNEL_REPO")" >> $GITHUB_ENV
 echo "KERNEL_SOURCE_BRANCH=$KERNEL_BRANCH" >> $GITHUB_ENV
+if kernel_version_eq "$KERNEL_VERSION" "6.1"; then
+  echo "KERNEL_SOURCE_REF=$KERNEL_6_1_REF" >> $GITHUB_ENV
+fi
 
 echo "RELEASE_REPO=$(simplify_gh_url "$GKI_RELEASES_REPO")" >> $GITHUB_ENV
 echo "KERNEL_NAME=${KERNEL_NAME}${RUN_NUM}" >> $GITHUB_ENV
@@ -71,13 +71,22 @@ trap 'echo "[-] Received SIGINT at $(date)" >> "$BUILD_LOGS"' INT
 
 log "Cloning kernel source from $(simplify_gh_url "$KERNEL_REPO")"
 if kernel_version_eq "$KERNEL_VERSION" "6.1"; then
-  git clone -q --depth=1 --recurse-submodules "$KERNEL_REPO" -b "$KERNEL_BRANCH" "$KSRC"
+  log "Pinning Android 14 GKI 6.1 source to $KERNEL_6_1_REF (Linux 6.1.138)"
+  git init -q "$KSRC"
+  git -C "$KSRC" remote add origin "$KERNEL_REPO"
+  git -C "$KSRC" fetch -q --depth=1 origin "$KERNEL_6_1_REF"
+  git -C "$KSRC" checkout -q --detach FETCH_HEAD
+  git -C "$KSRC" submodule update --init --recursive --depth=1
 else
   git clone -q --depth=1 "$KERNEL_REPO" -b "$KERNEL_BRANCH" "$KSRC"
 fi
 
 cd $KSRC
 LINUX_VERSION=$(make kernelversion)
+if kernel_version_eq "$KERNEL_VERSION" "6.1" && [ "$LINUX_VERSION" != "6.1.138" ]; then
+  error "Pinned shennong baseline must be Linux 6.1.138, got $LINUX_VERSION"
+  exit 1
+fi
 LINUX_VERSION_CODE=${LINUX_VERSION//./}
 DEFCONFIG_FILE=$(find ./arch/arm64/configs -name "$KERNEL_DEFCONFIG")
 echo "LINUX_VERSION=$LINUX_VERSION" >> $GITHUB_ENV
@@ -163,12 +172,13 @@ echo "::endgroup::"
 
 echo "::group::[+] Applied patches"
 
-if [ "$ENABLE_SAFE_PROFILE" = "true" ] && kernel_version_eq "$KERNEL_VERSION" "6.1"; then
-  log "Applying Shennong SAFE runtime-semantics profile"
-  bash "$WORKDIR/scripts/apply_shennong_safe_profile.sh"
-fi
-
-if ! kernel_version_eq "$KERNEL_VERSION" "6.1"; then
+if kernel_version_eq "$KERNEL_VERSION" "6.1"; then
+  # 6.1.138 is a clean Android14 GKI baseline, so re-apply only the
+  # compatibility pieces that GKID's later branch carried in-tree.
+  apply_force_load_module_patch
+  apply_extract_cert_key_pass_patch
+  cleanup_abi_gki_protected_exports
+elif ! kernel_version_eq "$KERNEL_VERSION" "6.1"; then
   if kernel_version_ge "$KERNEL_VERSION" "6.1"; then
     apply_kernel_patches
   fi
@@ -177,6 +187,10 @@ if ! kernel_version_eq "$KERNEL_VERSION" "6.1"; then
   cleanup_abi_gki_protected_exports
 fi
 
+if [ "$ENABLE_SAFE_PROFILE" = "true" ] && kernel_version_eq "$KERNEL_VERSION" "6.1"; then
+  log "Applying Shennong SAFE runtime-semantics profile"
+  bash "$WORKDIR/scripts/apply_shennong_safe_profile.sh"
+fi
 
 log "Applying BBRv3 patch"
 apply_patch_file $KERNEL_PATCHES/bbrv3/bbrv3.patch
@@ -389,7 +403,11 @@ source "$WORKDIR/configs/gki_defconfig.sh"
 if [ "${TODO:-kernel}" = "kernel" ]; then
   LATEST_COMMIT_HASH=$(git rev-parse --short HEAD)
   SUFFIX="${RUN_NUM}-${LATEST_COMMIT_HASH}"
-  config --set-str CONFIG_LOCALVERSION "-${KERNEL_NAME}${SUFFIX}"
+  if kernel_version_eq "$KERNEL_VERSION" "6.1"; then
+    config --set-str CONFIG_LOCALVERSION "-android14-11-${KERNEL_NAME}${SUFFIX}-4k"
+  else
+    config --set-str CONFIG_LOCALVERSION "-${KERNEL_NAME}${SUFFIX}"
+  fi
   config --disable CONFIG_LOCALVERSION_AUTO
   sed -i 's/echo "+"/# echo "+"/g' scripts/setlocalversion
 fi
