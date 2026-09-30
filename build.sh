@@ -12,6 +12,15 @@ ANYKERNEL_REPO="https://github.com/ahmed-alnassif/AK3-GKID"
 KERNEL_DEFCONFIG="gki_defconfig"
 
 KERNEL_VERSION="${KERNEL_VERSION:-6.1}"
+ENABLE_LING_ZRAM="${ENABLE_LING_ZRAM:-true}"
+ENABLE_BBG="${ENABLE_BBG:-true}"
+ENABLE_NTSYNC="${ENABLE_NTSYNC:-true}"
+ENABLE_KPM="${ENABLE_KPM:-true}"
+ZRAM_DEFAULT="${ZRAM_DEFAULT:-lz4}"
+
+# Reproducible SukiSU builtin revision for the first shennong build.
+# Bump deliberately after a successful build/test cycle.
+SUKISU_BUILTIN_REF="b20dee702035af09cb2ecb5f35443bbc1747f3e6"
 
 sudo timedatectl set-timezone "$TIMEZONE" || export TZ="$TIMEZONE"
 
@@ -110,6 +119,7 @@ fi
 generate_gh_changelog "maxsteeel/nomount" "master" 5 "$RELEASE_DIR/nomount_changelog.txt"
 generate_gh_changelog "tiann/KernelSU" "main" 5 "$RELEASE_DIR/ksu_changelog.txt"
 generate_gh_changelog "ReSukiSU/ReSukiSU" "main" 5 "$RELEASE_DIR/ReSukiSU_changelog.txt"
+generate_gh_changelog "SukiSU-Ultra/SukiSU-Ultra" "builtin" 5 "$RELEASE_DIR/SukiSU_changelog.txt"
 
 echo "::group::[*] Downloading Clang"
 CLANG_BIN="$WORKDIR/neutron-clang/bin"
@@ -164,7 +174,7 @@ log "Applying BBRv3 patch"
 apply_patch_file $KERNEL_PATCHES/bbrv3/bbrv3.patch
 
 
-if kernel_version_lt "$KERNEL_VERSION" "6.12"; then
+if [ "$ENABLE_NTSYNC" = "true" ] && kernel_version_lt "$KERNEL_VERSION" "6.12"; then
   log "Applying NTSync patches..."
   curl -LSs "https://github.com/WildKernels/kernel_patches/raw/main/common/ntsync/ntsync_base.patch" | apply_patch_file
 
@@ -176,9 +186,18 @@ if kernel_version_lt "$KERNEL_VERSION" "6.12"; then
   success "NTSync patches applied"
 fi
 
-log "BBG included"
-wget -qO- "https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh" | bash
-sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' "security/Kconfig"
+if [ "$ENABLE_LING_ZRAM" = "true" ] && kernel_version_eq "$KERNEL_VERSION" "6.1" && [ "$KSU" = "SKSU" ]; then
+  log "Applying enhanced LingLuo ZRAM stack"
+  curl -fsSL "https://raw.githubusercontent.com/44578287/GKID-Kernels/shennong-sukisu-gkid/scripts/apply_ling_zram_6_1.sh" | bash
+fi
+
+if [ "$ENABLE_BBG" = "true" ]; then
+  log "BBG included"
+  wget -qO- "https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh" | bash
+  sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' "security/Kconfig"
+else
+  log "BBG disabled by build input"
+fi
 
 if [ "$KSU" = "no" ] || [ "$KSU" = "vnlto" ] || [ "$No_DS" = "true" ]; then
   export DROIDSPACES="false"
@@ -211,6 +230,38 @@ if [ "$NH" = "true" ] && ! kernel_version_eq "$KERNEL_VERSION" "6.1" && kernel_v
 fi
 
 set -eo pipefail
+
+if [ "$KSU" = "SKSU" ]; then
+  log "SukiSU Ultra included"
+
+  if susfs_included; then
+    # Match the proven LingLuo17 GKI integration: SukiSU builtin + external
+    # gki-android14-6.1 SUSFS kernel-side patches. CONFIG_KPM is enabled by
+    # configs/gki_defconfig.sh for all KSU variants.
+    install_ksu "SukiSU-Ultra/SukiSU-Ultra" "$SUKISU_BUILTIN_REF"
+
+    UAPI_FILE="KernelSU/kernel/include/uapi/supercall.h"
+    CURRENT_UAPI="$(grep -ohE 'KERNEL_SU_UAPI_VERSION[^0-9]*[0-9]+' "$UAPI_FILE" 2>/dev/null | grep -oE '[0-9]+' | tail -n1 || true)"
+    if [ "${CURRENT_UAPI:-0}" -lt 4 ]; then
+      log "Syncing SukiSU builtin UAPI ${CURRENT_UAPI:-unknown} -> 4"
+      curl -fsSL "https://raw.githubusercontent.com/44578287/GKID-Kernels/shennong-sukisu-gkid/patches/sukisu-builtin-uapi4.patch" | patch -p1 --forward -d KernelSU
+    else
+      log "SukiSU builtin UAPI is already $CURRENT_UAPI; sync patch not needed"
+    fi
+
+    FINAL_UAPI="$(grep -ohE 'KERNEL_SU_UAPI_VERSION[^0-9]*[0-9]+' "$UAPI_FILE" | grep -oE '[0-9]+' | tail -n1)"
+    [ "$FINAL_UAPI" = "4" ] || { error "SukiSU UAPI sync failed: got $FINAL_UAPI"; exit 1; }
+    grep -q "ksu_install_su_fd" KernelSU/kernel/supercall/supercall.c || {
+      error "SukiSU UAPI4 su-session support is incomplete"; exit 1;
+    }
+
+    clone_susfs
+    apply_susfs_patches
+  else
+    install_ksu "SukiSU-Ultra/SukiSU-Ultra" "main"
+  fi
+fi
+
 if susfs_included && [ "$KSU" = "RSKSU" ]; then
   log "ReSukiSU included"
   install_ksu "ReSukiSU/ReSukiSU" "main"
