@@ -94,6 +94,7 @@ jobs:
   ensure-cache-release:
     name: Ensure ccache release exists
     needs: prepare
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Create persistent cache release if missing
