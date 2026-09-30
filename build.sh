@@ -16,6 +16,7 @@ ENABLE_LING_ZRAM="${ENABLE_LING_ZRAM:-true}"
 ENABLE_BBG="${ENABLE_BBG:-true}"
 ENABLE_NTSYNC="${ENABLE_NTSYNC:-true}"
 ENABLE_KPM="${ENABLE_KPM:-true}"
+ENABLE_SAFE_PROFILE="${ENABLE_SAFE_PROFILE:-true}"
 ZRAM_DEFAULT="${ZRAM_DEFAULT:-lz4}"
 
 # Reproducible SukiSU builtin revision for the first shennong build.
@@ -159,6 +160,11 @@ build_and_install_pahole
 echo "::endgroup::"
 
 echo "::group::[+] Applied patches"
+
+if [ "$ENABLE_SAFE_PROFILE" = "true" ] && kernel_version_eq "$KERNEL_VERSION" "6.1"; then
+  log "Applying Shennong SAFE runtime-semantics profile"
+  bash "$WORKDIR/scripts/apply_shennong_safe_profile.sh"
+fi
 
 if ! kernel_version_eq "$KERNEL_VERSION" "6.1"; then
   if kernel_version_ge "$KERNEL_VERSION" "6.1"; then
