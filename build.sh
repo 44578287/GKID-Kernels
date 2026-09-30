@@ -17,6 +17,8 @@ ENABLE_BBG="${ENABLE_BBG:-true}"
 ENABLE_NTSYNC="${ENABLE_NTSYNC:-true}"
 ENABLE_KPM="${ENABLE_KPM:-true}"
 ENABLE_SAFE_PROFILE="${ENABLE_SAFE_PROFILE:-true}"
+ENABLE_STRICT_MODULE_CRC="${ENABLE_STRICT_MODULE_CRC:-false}"
+export ENABLE_STRICT_MODULE_CRC
 ZRAM_DEFAULT="${ZRAM_DEFAULT:-lz4}"
 
 # Reproducible SukiSU builtin revision for the first shennong build.
