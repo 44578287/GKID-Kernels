@@ -8,7 +8,8 @@ VMLINUX="$OUTDIR/vmlinux"
 
 fail(){ echo "::error::$*"; exit 1; }
 need_cfg(){ grep -qx "$1=y" "$CFG" || fail "missing config: $1=y"; }
-need_sym(){ command -v llvm-nm >/dev/null 2>&1 || return 0; llvm-nm "$VMLINUX" | grep -qw "$1" || fail "missing symbol: $1"; }
+LLVM_NM="$GITHUB_WORKSPACE/neutron-clang/bin/llvm-nm"
+need_sym(){ [[ -x "$LLVM_NM" ]] || fail "llvm-nm not found: $LLVM_NM"; "$LLVM_NM" "$VMLINUX" | grep -qw "$1" || fail "missing symbol: $1"; }
 
 [[ -s "$CFG" ]] || fail "missing .config"
 [[ -s "$IMG" ]] || fail "missing Image"
@@ -46,7 +47,7 @@ if find . -name '*.rej' -type f | grep -q .; then
   fail "patch reject files exist"
 fi
 
-KR="$(make -s O="$OUTDIR" ARCH=arm64 kernelrelease)"
+KR="$(make -s -C "$GITHUB_WORKSPACE/ksrc" O="$GITHUB_WORKSPACE/$OUTDIR" ARCH=arm64 kernelrelease)"
 [[ "$KR" == 6.1.177-* ]] || fail "unexpected kernelrelease: $KR"
 
 echo "AUDIT_OK kernelrelease=$KR"
