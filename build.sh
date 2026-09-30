@@ -42,7 +42,7 @@ PATCHES_DIR="$WORKDIR/patches"
 source $WORKDIR/functions.sh
 
 if kernel_version_eq "$KERNEL_VERSION" "6.1"; then
-  KERNEL_BRANCH="android14-6.1.138_r00"
+  KERNEL_BRANCH="$KERNEL_6_1_REF"
 else
   IFS='|' read -r KERNEL_REPO KERNEL_BRANCH KERNEL_KMI <<< "$(resolve_kernel_source "$KERNEL_VERSION")"
 fi
