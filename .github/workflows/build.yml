@@ -41,6 +41,11 @@ on:
         type: boolean
         default: true
 
+      ENABLE_STRICT_MODULE_CRC:
+        description: "Strict module CRC checking"
+        type: boolean
+        default: false
+
       ENABLE_LING_ZRAM:
         description: "Enable LingLuo enhanced ZRAM stack"
         type: boolean
@@ -141,6 +146,7 @@ jobs:
           ENABLE_NTSYNC: ${{ github.event_name == 'push' && 'true' || inputs.ENABLE_NTSYNC }}
           ENABLE_KPM: ${{ github.event_name == 'push' && 'true' || inputs.ENABLE_KPM }}
           ENABLE_SAFE_PROFILE: ${{ github.event_name == 'push' && 'true' || inputs.ENABLE_SAFE_PROFILE }}
+          ENABLE_STRICT_MODULE_CRC: ${{ github.event_name == 'push' && 'false' || inputs.ENABLE_STRICT_MODULE_CRC }}
           BUILD_NAME: ${{ matrix.name }}
           RUN_NUM: -r${{ github.run_number }}
         run: |
@@ -154,6 +160,7 @@ jobs:
           KSU_SUSFS: ${{ github.event_name == 'push' && 'true' || inputs.ENABLE_SUSFS }}
           ENABLE_KPM: ${{ github.event_name == 'push' && 'true' || inputs.ENABLE_KPM }}
           ENABLE_SAFE_PROFILE: ${{ github.event_name == 'push' && 'true' || inputs.ENABLE_SAFE_PROFILE }}
+          ENABLE_STRICT_MODULE_CRC: ${{ github.event_name == 'push' && 'false' || inputs.ENABLE_STRICT_MODULE_CRC }}
           ENABLE_LING_ZRAM: ${{ github.event_name == 'push' && 'true' || inputs.ENABLE_LING_ZRAM }}
           ENABLE_BBG: ${{ github.event_name == 'push' && 'true' || inputs.ENABLE_BBG }}
           ENABLE_NTSYNC: ${{ github.event_name == 'push' && 'true' || inputs.ENABLE_NTSYNC }}
