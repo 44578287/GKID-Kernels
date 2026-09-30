@@ -255,6 +255,56 @@ if [ "$KSU" = "SKSU" ]; then
       error "SukiSU UAPI4 su-session support is incomplete"; exit 1;
     }
 
+    if ! grep -q "int ksu_handle_post_execveat_sucompat" KernelSU/kernel/feature/sucompat.c; then
+      log "Adding SukiSU SUSFS post-exec compatibility helper"
+      python3 - <<'PY'
+from pathlib import Path
+
+c = Path("KernelSU/kernel/feature/sucompat.c")
+text = c.read_text()
+needle = """    ksu_sulog_emit_pending(pending_sucompat, ret, GFP_KERNEL);
+    return 0;
+}
+
+#ifdef KSU_COMPAT_USE_STATIC_KEY"""
+replacement = """    ksu_sulog_emit_pending(pending_sucompat, ret, GFP_KERNEL);
+    return 0;
+}
+
+int ksu_handle_post_execveat_sucompat(int *fd, struct filename **filename_ptr,
+                                      void *argv_user, void *envp_user,
+                                      int *__never_use_flags, int *retval)
+{
+    if (retval && *retval >= 0)
+        (void)ksu_install_su_fd();
+
+    return 0;
+}
+
+#ifdef KSU_COMPAT_USE_STATIC_KEY"""
+if needle not in text:
+    raise SystemExit("sucompat.c insertion anchor not found")
+c.write_text(text.replace(needle, replacement, 1))
+
+h = Path("KernelSU/kernel/feature/sucompat.h")
+text = h.read_text()
+needle = """int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
+                 void *argv_user, void *envp_user,
+                 int *__never_use_flags);
+#else"""
+replacement = """int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
+                 void *argv_user, void *envp_user,
+                 int *__never_use_flags);
+int ksu_handle_post_execveat_sucompat(int *fd, struct filename **filename_ptr,
+                                      void *argv_user, void *envp_user,
+                                      int *__never_use_flags, int *retval);
+#else"""
+if needle not in text:
+    raise SystemExit("sucompat.h insertion anchor not found")
+h.write_text(text.replace(needle, replacement, 1))
+PY
+    fi
+
     clone_susfs
     apply_susfs_patches
   else
