@@ -194,7 +194,7 @@ fi
 
 if [ "$ENABLE_LING_ZRAM" = "true" ] && kernel_version_eq "$KERNEL_VERSION" "6.1" && [ "$KSU" = "SKSU" ]; then
   log "Applying enhanced LingLuo ZRAM stack"
-  curl -fsSL "https://raw.githubusercontent.com/44578287/GKID-Kernels/shennong-sukisu-gkid/scripts/apply_ling_zram_6_1.sh" | bash
+  bash "$WORKDIR/scripts/apply_ling_zram_6_1.sh"
 fi
 
 if [ "$ENABLE_BBG" = "true" ]; then
@@ -250,7 +250,7 @@ if [ "$KSU" = "SKSU" ]; then
     CURRENT_UAPI="$(grep -ohE 'KERNEL_SU_UAPI_VERSION[^0-9]*[0-9]+' "$UAPI_FILE" 2>/dev/null | grep -oE '[0-9]+' | tail -n1 || true)"
     if [ "${CURRENT_UAPI:-0}" -lt 4 ]; then
       log "Syncing SukiSU builtin UAPI ${CURRENT_UAPI:-unknown} -> 4"
-      curl -fsSL "https://raw.githubusercontent.com/44578287/GKID-Kernels/shennong-sukisu-gkid/patches/sukisu-builtin-uapi4.patch" | patch -p1 --forward -d KernelSU
+      patch -p1 --forward -d KernelSU < "$WORKDIR/patches/sukisu-builtin-uapi4.patch"
     else
       log "SukiSU builtin UAPI is already $CURRENT_UAPI; sync patch not needed"
     fi
