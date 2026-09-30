@@ -4,6 +4,9 @@ permissions:
   actions: write
 
 on:
+  push:
+    branches:
+      - ci-trigger
   workflow_dispatch:
     inputs:
       TODO:
@@ -117,21 +120,21 @@ jobs:
           KERNEL_VERSION: ${{ matrix.kernel_version }}
           KSU: ${{ matrix.KSU }}
           KSU_COMPAT: ${{ matrix.KSU_COMPAT }}
-          KSU_SUSFS: ${{ inputs.ENABLE_SUSFS }}
+          KSU_SUSFS: ${{ github.event_name == 'push' && 'true' || inputs.ENABLE_SUSFS }}
           C_LTO: ${{ matrix.C_LTO }}
           No_DS: "false"
-          TODO: ${{ inputs.TODO }}
+          TODO: ${{ github.event_name == 'push' && 'kernel' || inputs.TODO }}
           TEST: "no"
-          LTO: ${{ inputs.LTO }}
+          LTO: ${{ github.event_name == 'push' && 'fullLTO' || inputs.LTO }}
           CLEAN_LTO_CACHE: "true"
           DROIDSPACES: "false"
           NH: "false"
           NM: "false"
-          ENABLE_LING_ZRAM: ${{ inputs.ENABLE_LING_ZRAM }}
-          ZRAM_DEFAULT: ${{ inputs.ZRAM_DEFAULT }}
-          ENABLE_BBG: ${{ inputs.ENABLE_BBG }}
-          ENABLE_NTSYNC: ${{ inputs.ENABLE_NTSYNC }}
-          ENABLE_KPM: ${{ inputs.ENABLE_KPM }}
+          ENABLE_LING_ZRAM: ${{ github.event_name == 'push' && 'true' || inputs.ENABLE_LING_ZRAM }}
+          ZRAM_DEFAULT: ${{ github.event_name == 'push' && 'lz4' || inputs.ZRAM_DEFAULT }}
+          ENABLE_BBG: ${{ github.event_name == 'push' && 'true' || inputs.ENABLE_BBG }}
+          ENABLE_NTSYNC: ${{ github.event_name == 'push' && 'true' || inputs.ENABLE_NTSYNC }}
+          ENABLE_KPM: ${{ github.event_name == 'push' && 'true' || inputs.ENABLE_KPM }}
           BUILD_NAME: ${{ matrix.name }}
           RUN_NUM: -r${{ github.run_number }}
         run: |
@@ -189,7 +192,7 @@ jobs:
           SUSFS_VERSION=${{ env.SUSFS_VERSION }}
           BASE_NAME=${{ env.BASE_NAME }}
           KSU=${{ matrix.KSU }}
-          KSU_SUSFS=${{ inputs.ENABLE_SUSFS }}
+          KSU_SUSFS=${{ github.event_name == 'push' && 'true' || inputs.ENABLE_SUSFS }}
           KERNEL_VERSION=${{ env.KERNEL_VERSION }}
           ANDROID_RELEASE=${{ env.ANDROID_RELEASE }}
           KERNEL_SOURCE_REPO=${{ env.KERNEL_SOURCE_REPO }}
@@ -218,7 +221,7 @@ jobs:
           retention-days: 1
 
       - name: Send rejected patches to Telegram
-        if: inputs.PUBLISH_RELEASE && always()
+        if: github.event_name == 'workflow_dispatch' && inputs.PUBLISH_RELEASE && always()
         run: |
           if [ -d "rejected-patches-${{ matrix.name }}" ] && [ "$(find rejected-patches-${{ matrix.name }} -type f | wc -l)" -gt 0 ]; then
             for file in rejected-patches-${{ matrix.name }}/*; do
@@ -264,7 +267,7 @@ jobs:
 
   release:
     needs: build
-    if: inputs.PUBLISH_RELEASE && always() && inputs.TODO != 'defconfig'
+    if: github.event_name == 'workflow_dispatch' && inputs.PUBLISH_RELEASE && always() && inputs.TODO != 'defconfig'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source
@@ -290,7 +293,7 @@ jobs:
           DROIDSPACES_INPUT: "false"
           NH_INPUT: "false"
           NM_INPUT: "false"
-          LTO_INPUT: ${{ inputs.LTO }}
+          LTO_INPUT: ${{ github.event_name == 'push' && 'fullLTO' || inputs.LTO }}
         run: python3 .github/scripts/prepare_release.py
 
       - name: Upload All Builds to release repo
