@@ -12,6 +12,11 @@ ANYKERNEL_REPO="https://github.com/ahmed-alnassif/AK3-GKID"
 KERNEL_DEFCONFIG="gki_defconfig"
 
 KERNEL_VERSION="${KERNEL_VERSION:-6.1}"
+ENABLE_LING_ZRAM="${ENABLE_LING_ZRAM:-true}"
+ENABLE_BBG="${ENABLE_BBG:-true}"
+ENABLE_NTSYNC="${ENABLE_NTSYNC:-true}"
+ENABLE_KPM="${ENABLE_KPM:-true}"
+ZRAM_DEFAULT="${ZRAM_DEFAULT:-lz4}"
 
 # Reproducible SukiSU builtin revision for the first shennong build.
 # Bump deliberately after a successful build/test cycle.
@@ -169,7 +174,7 @@ log "Applying BBRv3 patch"
 apply_patch_file $KERNEL_PATCHES/bbrv3/bbrv3.patch
 
 
-if kernel_version_lt "$KERNEL_VERSION" "6.12"; then
+if [ "$ENABLE_NTSYNC" = "true" ] && kernel_version_lt "$KERNEL_VERSION" "6.12"; then
   log "Applying NTSync patches..."
   curl -LSs "https://github.com/WildKernels/kernel_patches/raw/main/common/ntsync/ntsync_base.patch" | apply_patch_file
 
@@ -181,14 +186,18 @@ if kernel_version_lt "$KERNEL_VERSION" "6.12"; then
   success "NTSync patches applied"
 fi
 
-if kernel_version_eq "$KERNEL_VERSION" "6.1" && [ "$KSU" = "SKSU" ]; then
+if [ "$ENABLE_LING_ZRAM" = "true" ] && kernel_version_eq "$KERNEL_VERSION" "6.1" && [ "$KSU" = "SKSU" ]; then
   log "Applying enhanced LingLuo ZRAM stack"
   bash "$WORKDIR/scripts/apply_ling_zram_6_1.sh"
 fi
 
-log "BBG included"
-wget -qO- "https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh" | bash
-sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' "security/Kconfig"
+if [ "$ENABLE_BBG" = "true" ]; then
+  log "BBG included"
+  wget -qO- "https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh" | bash
+  sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' "security/Kconfig"
+else
+  log "BBG disabled by build input"
+fi
 
 if [ "$KSU" = "no" ] || [ "$KSU" = "vnlto" ] || [ "$No_DS" = "true" ]; then
   export DROIDSPACES="false"
